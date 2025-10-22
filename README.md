@@ -90,6 +90,8 @@ El cliente C no tiene credenciales VPN ni túnel activo, por lo que:
 
 ## Credenciales por Defecto
 
+
+** Importante **
 **⚠️ Cambiar en producción ⚠️**
 
 - Usuario A: `A` / Contraseña: `A_password`
