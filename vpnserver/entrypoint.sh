@@ -34,12 +34,8 @@ echo "client-to-client" > /tmp/server_directives.txt
 "$SCRIPTS/sacli" --key "vpn.server.config_text" --value_file=/tmp/server_directives.txt ConfigPut
 rm -f /tmp/server_directives.txt
 
-# 4) (Opcional) Forzar perfiles con tls-crypt-v2 si se desea
-if [ "${ENABLE_TLS_CRYPT_V2}" = "true" ]; then
-  TLSC2="--prefer-tls-crypt-v2"
-else
-  TLSC2=""
-fi
+# 4) Deshabilitar tls-crypt-v2 para compatibilidad con OpenVPN 2.4
+TLSC2=""
 
 # 5) Crear usuarios locales y poner password
 create_user () {

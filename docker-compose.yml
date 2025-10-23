@@ -1,51 +1,27 @@
 services:
-  vpnserver:
-    build: ./vpnserver
-    container_name: vpnserver
-    cap_add:
-      - NET_ADMIN
-      - MKNOD
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    # Puertos estándar de Access Server:
-    ports:
-      - "943:943/tcp"    # Admin & Client Web UI
-      - "443:443/tcp"    # OpenVPN TCP + port sharing con Web UI
-      - "1194:1194/udp"  # OpenVPN UDP
-    environment:
-      # Passwords para usuarios A y B (cámbialos en producción)
-      - USER_A=A
-      - PASS_A=A_password
-      - USER_B=B
-      - PASS_B=B_password
-      # Nombre que meteremos en la config del servidor (.ovpn apuntará a esto)
-      - AS_HOSTNAME=vpnserver
-      # Habilitar TLS-crypt v2 en perfiles (si tu cliente lo soporta)
-      - ENABLE_TLS_CRYPT_V2=true
-    volumes:
-      - ovpn-as-data:/openvpn
-      - clients-configs:/clients
-    restart: unless-stopped
-    networks:
-      - lan
-
   client-a:
     build: ./client
     container_name: client-a
-    depends_on:
-      - vpnserver
     cap_add:
       - NET_ADMIN
     devices:
       - /dev/net/tun:/dev/net/tun
+    ports:
+      - "5901:5900"  # VNC puerto para cliente A
+      - "1194:1194/udp"  # OpenVPN server port
     environment:
       - CLIENT_NAME=A
       - CLIENT_USER=A
       - CLIENT_PASS=A_password
       - HELLO_TEXT=Hello from A
       - HTTP_PORT=8080
+      - VNC_PW=""  # Sin contraseña VNC
+      - VNC_RESOLUTION=1024x768
+      - VPN_ROLE=server
+      - VPN_SERVER_IP=10.8.0.1
+      - VPN_CLIENT_IPS=10.8.0.2,10.8.0.3
     volumes:
-      - clients-configs:/clients:ro
+      - openvpn-configs:/etc/openvpn
     restart: unless-stopped
     networks:
       - lan
@@ -54,19 +30,26 @@ services:
     build: ./client
     container_name: client-b
     depends_on:
-      - vpnserver
+      - client-a
     cap_add:
       - NET_ADMIN
     devices:
       - /dev/net/tun:/dev/net/tun
+    ports:
+      - "5902:5900"  # VNC puerto para cliente B
     environment:
       - CLIENT_NAME=B
       - CLIENT_USER=B
       - CLIENT_PASS=B_password
       - HELLO_TEXT=Hello from B
       - HTTP_PORT=8080
+      - VNC_PW=""  # Sin contraseña VNC
+      - VNC_RESOLUTION=1024x768
+      - VPN_ROLE=client
+      - VPN_SERVER_IP=client-a
+      - VPN_CLIENT_IP=10.8.0.2
     volumes:
-      - clients-configs:/clients:ro
+      - openvpn-configs:/etc/openvpn
     restart: unless-stopped
     networks:
       - lan
@@ -75,13 +58,21 @@ services:
     container_name: kali-c
     shm_size: "2g"
     user: root  # Iniciar como root para poder modificar usuarios
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_ADMIN
+      - NET_BROADCAST
+      - NET_BIND_SERVICE
+    privileged: true  # Necesario para Wireshark
     environment:
       - VNC_PW=kalipass
       - PROXY_MODE=none
     ports:
-      - "6901:6901"
+      - "6902:6901"
     volumes:
       - kali-home:/home/kasm-user
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Acceso a Docker
     networks:
       - lan
     restart: unless-stopped
@@ -91,9 +82,9 @@ services:
       echo 'kasm-user:kalipass' | chpasswd &&
       exec /dockerstartup/kasm_default_profile.sh /dockerstartup/vnc_startup.sh /dockerstartup/kasm_startup.sh
       "
+
 volumes:
-  ovpn-as-data:
-  clients-configs:
+  openvpn-configs:
   kali-home:
 
 networks:

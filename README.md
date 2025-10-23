@@ -1,38 +1,39 @@
-# OpenVPN Access Server - Entorno de Pruebas
+# OpenVPN Site-to-Site (S2S) - Entorno de Pruebas
 
-Este repositorio contiene un entorno de pruebas con OpenVPN Access Server y clientes que demuestran comunicación segura peer-to-peer a través de VPN.
+Este repositorio contiene un entorno de pruebas con túnel OpenVPN Site-to-Site entre las máquinas A y B, demostrando comunicación segura cifrada entre sitios.
 
 ## Estructura
 
 ```
 .
 ├─ docker-compose.yml
-├─ vpnserver/
-│  ├─ Dockerfile
-│  └─ entrypoint.sh      # inicia AS, configura host, client-to-client, crea A/B y exporta .ovpn
 └─ client/
    ├─ Dockerfile
-   └─ entrypoint.sh      # OpenVPN client + HTTP "hello" solo por tun0
+   └─ entrypoint.sh      # OpenVPN S2S server/client + HTTP "hello" solo por tun0
 ```
 
 ## Componentes
 
-### VPN Server (OpenVPN Access Server)
-- Expone puertos 943/TCP (Web UI), 443/TCP y 1194/UDP
-- Configura automáticamente usuarios A y B con credenciales
-- Habilita `client-to-client` para comunicación directa entre clientes
-- Genera perfiles `.ovpn` automáticamente
+### Máquina A (Servidor OpenVPN S2S)
+- Actúa como servidor OpenVPN Site-to-Site
+- Expone puerto 1194/UDP para conexiones de clientes
+- Genera automáticamente certificados CA, servidor y clientes
+- Configura red VPN 10.8.0.0/24
+- Ejecuta servidor HTTP en puerto 8080 accesible solo por tun0
+- **Interfaz VNC web disponible** para acceso gráfico
 
-### Clientes A y B
-- Se conectan automáticamente al servidor VPN con sus credenciales
-- Ejecutan un servidor HTTP simple en puerto 8080
+### Máquina B (Cliente OpenVPN S2S)
+- Se conecta automáticamente al servidor A
+- Obtiene IP VPN: B=10.8.0.6
+- Ejecuta servidor HTTP simple en puerto 8080
+- **Interfaz VNC web disponible** para acceso gráfico
 - El servidor HTTP **solo es accesible a través de la interfaz tun0** (VPN)
-- Pueden comunicarse entre sí a través de la VPN
+- Puede comunicarse con A a través del túnel VPN
 
 ### Cliente C (Kali Linux con GUI)
 - Máquina Kali con interfaz gráfica web
-- **NO tiene credenciales VPN** y por tanto no puede acceder a A/B
-- Accesible en http://localhost:6901 (usuario: kasm_user, contraseña: kali)
+- **NO tiene túnel VPN** y por tanto no puede acceder a A/B
+- Accesible en http://localhost:6902 (usuario: kasm_user, contraseña: kali)
 
 ## Uso
 
@@ -42,76 +43,71 @@ Este repositorio contiene un entorno de pruebas con OpenVPN Access Server y clie
 docker compose up -d --build
 ```
 
-### Ver la contraseña auto-generada del admin (primera vez)
-
-```bash
-docker logs vpnserver | grep -i "Auto-generated pass"
-```
-
 ### Acceder a las interfaces web
 
-- **Admin UI**: https://localhost:943/admin
-- **Client UI**: https://localhost:943/
-- **Kali GUI**: http://localhost:6901
+- **Cliente A VNC**: http://localhost:5901 (sin contraseña)
+- **Cliente B VNC**: http://localhost:5902 (sin contraseña)
+- **Kali GUI**: http://localhost:6902
 
 ### Verificar IPs de los clientes VPN
 
 ```bash
-# Ver IP tun0 de A
-docker exec -it A bash -lc "ip -4 addr show tun0"
+# Ver IP tun0 de A (servidor)
+docker exec -it client-a bash -lc "ip -4 addr show tun0"
 
 # Ver IP tun0 de B
-docker exec -it B bash -lc "ip -4 addr show tun0"
+docker exec -it client-b bash -lc "ip -4 addr show tun0"
+
 ```
 
-### Probar conectividad entre A y B
+### Probar conectividad entre máquinas VPN
 
 ```bash
-# Desde A hacia B (sustituye <IP_TUN_DE_B> por la IP obtenida arriba)
-docker exec -it A bash -lc "curl -s http://<IP_TUN_DE_B>:8080"
+# Desde A hacia B (IP VPN: 10.8.0.6)
+docker exec -it client-a bash -lc "curl -s http://10.8.0.6:8080"
 
-# Desde B hacia A (sustituye <IP_TUN_DE_A> por la IP obtenida arriba)
-docker exec -it B bash -lc "curl -s http://<IP_TUN_DE_A>:8080"
+# Desde B hacia A (IP VPN: 10.8.0.1)
+docker exec -it client-b bash -lc "curl -s http://10.8.0.1:8080"
 ```
 
 ### Verificar que C no puede acceder
 
-El cliente C no tiene credenciales VPN ni túnel activo, por lo que:
+El cliente C no tiene túnel VPN activo, por lo que:
 - No puede acceder a los servicios HTTP de A/B por sus IPs VPN (no tiene túnel)
 - No puede acceder por la red Docker directamente (iptables bloquea todo excepto tun0)
 
 ## Características de Seguridad
 
-1. **Autenticación por usuario/contraseña**: Los clientes A y B requieren credenciales válidas
-2. **Comunicación cifrada**: Todo el tráfico entre clientes pasa por el túnel VPN cifrado
+1. **Certificados X.509**: Autenticación mutua usando certificados digitales
+2. **Comunicación cifrada**: Todo el tráfico entre sitios pasa por el túnel VPN cifrado con AES-256-CBC
 3. **Aislamiento de red**: Los servicios HTTP solo son accesibles a través de tun0
-4. **Client-to-client**: Los clientes VPN pueden comunicarse directamente entre sí
-5. **Seguridad por falta de credenciales**: C no puede acceder porque no tiene credenciales VPN válidas
+4. **Site-to-Site**: Comunicación directa entre sitios a través del túnel VPN
+5. **TLS-Auth**: Protección adicional contra ataques de denegación de servicio
+6. **Seguridad por falta de túnel**: C no puede acceder porque no tiene túnel VPN activo
 
-## Credenciales por Defecto
+## Configuración de Red VPN
 
-
-** Importante **
-**⚠️ Cambiar en producción ⚠️**
-
-- Usuario A: `A` / Contraseña: `A_password`
-- Usuario B: `B` / Contraseña: `B_password`
-- Kali GUI: `kasm_user` / `kali`
+- **Red VPN**: 10.8.0.0/24
+- **Servidor A**: 10.8.0.1
+- **Cliente B**: 10.8.0.6
+- **Puerto**: 1194/UDP
+- **Cifrado**: AES-256-CBC
+- **Autenticación**: Certificados X.509 + TLS-Auth
 
 ## Configuración Avanzada
 
 Las variables de entorno en `docker-compose.yml` permiten personalizar:
 
-- `AS_HOSTNAME`: Nombre del servidor VPN (debe ser resoluble por los clientes)
-- `USER_A`, `PASS_A`: Credenciales del usuario A
-- `USER_B`, `PASS_B`: Credenciales del usuario B
-- `ENABLE_TLS_CRYPT_V2`: Habilitar TLS-crypt v2 en los perfiles
+- `VPN_ROLE`: "server" para A, "client" para B
+- `VPN_SERVER_IP`: IP del servidor (client-a para B)
+- `VPN_CLIENT_IP`: IP VPN asignada al cliente
+- `VPN_SERVER_IP_RANGE`: Rango de IPs del servidor
 
 ## Notas
 
-- La licencia gratuita de OpenVPN Access Server permite 2 conexiones simultáneas
-- Los perfiles `.ovpn` se generan automáticamente y se comparten vía volumen Docker
-- El hostname `vpnserver` es resoluble dentro de la red Docker bridge
-- Para uso en producción, configurar un FQDN público y abrir/forwardear los puertos necesarios
+- Los certificados se generan automáticamente al iniciar cada contenedor
+- El túnel VPN se establece automáticamente entre A y B
+- Para uso en producción, usar certificados firmados por una CA externa
+- El hostname `client-a` es resoluble dentro de la red Docker bridge
 
 # seg-inf-vpn-access
