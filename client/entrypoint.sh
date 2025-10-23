@@ -171,4 +171,5 @@ python3 -m http.server "${HTTP_PORT}" --directory /srv &
 
 # Mantener el contenedor corriendo
 wait
-
+sudo apt update
+sudo apt install -y iputils-ping

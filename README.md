@@ -111,3 +111,51 @@ Las variables de entorno en `docker-compose.yml` permiten personalizar:
 - El hostname `client-a` es resoluble dentro de la red Docker bridge
 
 # seg-inf-vpn-access
+
+
+
+Voy a verificar el estado de la VPN después del reinicio y crear una guía paso a paso para solucionarlo.
+
+```bash
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+```
+Los contenedores están iniciando. Vamos a esperar un momento y verificar el estado de la VPN:
+
+```bash
+sleep 30 && echo "=== Verificando VPN ===" && docker exec -it client-a ip addr show tun0 2>/dev/null || echo "No tun0 en A" && echo "=== Cliente B ===" && docker exec -it client-b ip addr show tun0 2>/dev/null || echo "No tun0 en B"
+```
+¡Excelente! La VPN está funcionando automáticamente. Vamos a verificar la conectividad:
+
+```bash
+echo "=== Probando Conectividad VPN ===" && docker exec -it client-a ping -c 3 10.8.0.6 && echo "=== Probando HTTP VPN ===" && docker exec -it client-a curl -s http://10.8.0.6:8080 | head -1
+```
+El contenedor A no tiene `ping` instalado. Vamos a probar con `curl` directamente:
+
+```bash
+echo "=== Probando HTTP VPN A→B ===" && docker exec -it client-a curl -s http://10.8.0.6:8080 | head -1 && echo "=== Probando HTTP VPN B→A ===" && docker exec -it client-b curl -s http://10.8.0.1:8080 | head -1
+```
+Ran tool
+## ✅ **¡VPN Site-to-Site Funcionando Perfectamente!**
+
+La VPN está funcionando automáticamente después del `docker compose up`. No necesita pasos adicionales.
+
+## 📋 **Guía Paso a Paso - Comandos Post Compose**
+
+### **1. Verificación Automática (Opcional)**
+```bash
+# Verificar que los contenedores están corriendo
+docker ps --format "table {{.Names}}\t{{.Status}}"
+
+# Verificar interfaces VPN
+docker exec -it client-a ip addr show tun0
+docker exec -it client-b ip addr show tun0
+```
+
+### **2. Probar Conectividad VPN**
+```bash
+# Probar HTTP A→B (a través de VPN)
+docker exec -it client-a curl -s http://10.8.0.6:8080
+
+# Probar HTTP B→A (a través de VPN)
+docker exec -it client-b curl -s http://10.8.0.1:8080
+```
