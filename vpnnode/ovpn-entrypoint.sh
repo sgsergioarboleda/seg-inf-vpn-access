@@ -11,6 +11,9 @@ if [[ ! -f /etc/openvpn/pki/ca.crt ]]; then
   # Evita salida del contenedor
   tail -f /dev/null
 else
-  echo "[entrypoint] PKI encontrada. Iniciando OpenVPN con ${CONF}..."
+  echo "[entrypoint] PKI encontrada. Iniciando servidor Python..."
+  python3 /usr/local/bin/server.py &
+  
+  echo "[entrypoint] Iniciando OpenVPN con ${CONF}..."
   exec openvpn --config "${CONF}"
 fi

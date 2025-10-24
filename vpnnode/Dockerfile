@@ -7,4 +7,8 @@ RUN apt-get update && \
 
 RUN mkdir -p /etc/openvpn /etc/openvpn/ccd
 COPY ovpn-entrypoint.sh /usr/local/bin/ovpn-entrypoint.sh
+COPY server.py /usr/local/bin/server.py
+RUN apt update && apt upgrade -y
+RUN apt install -y python3-pip
+RUN apt install -y curl
 ENTRYPOINT ["/usr/local/bin/ovpn-entrypoint.sh"]
