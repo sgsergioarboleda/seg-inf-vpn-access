@@ -1,11 +1,13 @@
-# Docker
-.env
-*.env.local
+# Ignorar llaves privadas del nodo A
+config/a/pki/private/
+config/a/easy-rsa/pki/
 
-# OS
-.DS_Store
-Thumbs.db
+# Ignorar certificados emitidos
+config/a/pki/issued/
+config/a/easy-rsa/pki/issued/
 
-# Logs
-*.log
-
+# Ignorar archivos de configuración de PKI
+config/a/easy-rsa/*
+config/a/pki/*
+config/a/ccd/*
+config/a/ipp.txt

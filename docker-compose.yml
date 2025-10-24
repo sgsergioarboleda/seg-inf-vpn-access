@@ -1,116 +1,44 @@
-services:
-  # SITIO A - Gateway con VPN Server
-  client-a:
-    build: ./client
-    container_name: client-a
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-      - SYS_ADMIN
-      - NET_BROADCAST
-      - NET_BIND_SERVICE
-    privileged: true
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    ports:
-      - "5901:5900"  # VNC puerto para cliente A
-      - "1194:1194/udp"  # OpenVPN server port
-    environment:
-      - CLIENT_NAME=A
-      - CLIENT_USER=A
-      - CLIENT_PASS=A_password
-      - HELLO_TEXT=Hello from Site A Gateway
-      - HTTP_PORT=8080
-      - VNC_PW=""  # Sin contraseña VNC
-      - VNC_RESOLUTION=1024x768
-      - VPN_ROLE=server
-      - VPN_SERVER_IP=10.8.0.1
-      - VPN_CLIENT_IPS=10.8.0.2,10.8.0.3
-      - SITE_NETWORK=10.10.10.0/24
-      - SITE_GATEWAY=10.10.10.1
-    volumes:
-      - openvpn-configs:/etc/openvpn
-    restart: unless-stopped
-    networks:
-      vpn-network:
-
-  # SITIO B - Gateway con VPN Client
-  client-b:
-    build: ./client
-    container_name: client-b
-    depends_on:
-      - client-a
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-      - SYS_ADMIN
-      - NET_BROADCAST
-      - NET_BIND_SERVICE
-    privileged: true
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    ports:
-      - "5902:5900"  # VNC puerto para cliente B
-    environment:
-      - CLIENT_NAME=B
-      - CLIENT_USER=B
-      - CLIENT_PASS=B_password
-      - HELLO_TEXT=Hello from Site B Gateway
-      - HTTP_PORT=8080
-      - VNC_PW=""  # Sin contraseña VNC
-      - VNC_RESOLUTION=1024x768
-      - VPN_ROLE=client
-      - VPN_SERVER_IP=172.20.0.2
-      - VPN_CLIENT_IP=10.8.0.2
-      - SITE_NETWORK=10.10.20.0/24
-      - SITE_GATEWAY=10.10.20.1
-    volumes:
-      - openvpn-configs:/etc/openvpn
-    restart: unless-stopped
-    networks:
-      vpn-network:
-
-  # Kali Linux - En la misma red que Site A pero SIN acceso VPN
-  kali-c:
-    image: kasmweb/core-kali-rolling:1.18.0-rolling-daily
-    container_name: kali-c
-    shm_size: "2g"
-    user: root  # Iniciar como root para poder modificar usuarios
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-      - SYS_ADMIN
-      - NET_BROADCAST
-      - NET_BIND_SERVICE
-    privileged: true  # Necesario para Wireshark
-    environment:
-      - VNC_PW=kalipass
-      - PROXY_MODE=none
-    ports:
-      - "6902:6901"
-    volumes:
-      - kali-home:/home/kasm-user
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # Acceso a Docker
-    networks:
-      vpn-network:
-    restart: unless-stopped
-    command: >
-      bash -c "
-      usermod -aG sudo kasm-user &&
-      echo 'kasm-user:kalipass' | chpasswd &&
-      exec /dockerstartup/kasm_default_profile.sh /dockerstartup/vnc_startup.sh /dockerstartup/kasm_startup.sh
-      "
-
-volumes:
-  openvpn-configs:
-  kali-home:
-
 networks:
-  # Red compartida para VPN Site-to-Site
-  vpn-network:
+  lan_a:
     driver: bridge
     ipam:
-      config:
-        - subnet: 172.20.0.0/16
-          gateway: 172.20.0.1
+      config: [ { subnet: 172.100.0.0/24 } ]
+  lan_b:
+    driver: bridge
+    ipam:
+      config: [ { subnet: 172.200.0.0/24 } ]
 
+services:
+  ubuntu-a:
+    build: ./vpnnode
+    container_name: ubuntu-a
+    cap_add: [ "NET_ADMIN" ]
+    devices: [ "/dev/net/tun:/dev/net/tun" ]
+    sysctls:
+      net.ipv4.ip_forward: "1"
+    environment:
+      - OVPN_CONFIG_PATH=/etc/openvpn/server.conf
+    volumes:
+      - ./config/a:/etc/openvpn
+    networks:
+      lan_a:
+        ipv4_address: 172.100.0.10
+    ports:
+      - "1194:1194/udp"
+
+  ubuntu-b:
+    build: ./vpnnode
+    container_name: ubuntu-b
+    cap_add: [ "NET_ADMIN" ]
+    devices: [ "/dev/net/tun:/dev/net/tun" ]
+    sysctls:
+      net.ipv4.ip_forward: "1"
+    environment:
+      - OVPN_CONFIG_PATH=/etc/openvpn/client.conf
+    volumes:
+      - ./config/b:/etc/openvpn
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      lan_b:
+        ipv4_address: 172.200.0.10
